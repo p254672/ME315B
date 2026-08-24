@@ -1,0 +1,211 @@
+---
+title: "Laboratório 01 – Importação e Manipulação de Dados em R"
+subtitle: "Manipulação de Dados no Formato Tidy"
+author: "Pedro Tilhe"
+date: "2026-08-18"
+format:
+  pdf:
+    toc: false
+    number-sections: false
+lang: pt
+execute:
+  echo: true
+  warning: false
+---
+
+
+# Introdução
+
+Neste laboratório trabalhamos com os bancos de dados de casos de tuberculose (`table1` a `table4b`) distribuídos com o pacote `tidyverse`, com o objetivo de caracterizar o formato *tidy* e manipular os dados usando `dplyr`, `tidyr` e `ggplot2`.
+
+## 1. Carregando o pacote `tidyverse`
+
+```{r}
+#| message: false
+library(tidyverse)
+```
+
+## 2. Os bancos `table1`, `table2`, `table3`, `table4a` e `table4b`
+
+```{r}
+table1
+table2
+table3
+table4a
+table4b
+```
+
+Um conjunto de dados é dito **tidy** (arrumado) quando:
+
+1. cada variável forma uma coluna;
+2. cada observação forma uma linha;
+3. cada tipo de unidade observacional forma uma tabela.
+
+Analisando cada banco:
+
+- **`table1`**: está no formato *tidy*. Cada uma das quatro colunas (`country`, `year`, `cases`, `population`) corresponde a uma única variável, e cada linha representa uma observação (um país em um ano). Não há variáveis misturadas em uma mesma coluna nem uma mesma variável espalhada em várias colunas.
+
+- **`table2`**: **não** está no formato *tidy*. A coluna `type` não é uma variável propriamente dita: ela armazena os *nomes* de duas variáveis diferentes (`"cases"` e `"population"`), e a coluna `count` armazena os valores dessas duas variáveis misturados. Ou seja, cada observação (país-ano) está espalhada em duas linhas.
+
+- **`table3`**: **não** está no formato *tidy*. A coluna `rate` contém, em formato de texto (`"casos/população"`), duas variáveis (número de casos e tamanho da população) combinadas em uma única coluna. Duas variáveis deveriam ocupar duas colunas separadas, e não uma só.
+
+- **`table4a`**: **não** está no formato *tidy*. Os nomes das colunas `1999` e `2000` não são variáveis, e sim *valores* da variável `year`. Além disso, os valores armazenados nessas colunas correspondem a apenas uma variável (`cases`), de modo que cada observação (país-ano) está espalhada em duas colunas em vez de estar em uma linha.
+
+- **`table4b`**: pelo mesmo motivo de `table4a`, **não** está no formato *tidy*: os nomes das colunas `1999` e `2000` são valores de `year`, e os valores nas colunas correspondem à variável `population`.
+
+## 3. Taxa de ocorrência de tuberculose por 10.000 pessoas
+
+```{r}
+taxas <- table1 %>%
+  mutate(rate = cases / population * 10000)
+
+taxas
+```
+
+## 4. Número de casos de tuberculose por ano
+
+```{r}
+table1 %>%
+  group_by(year) %>%
+  summarise(casos = sum(cases))
+```
+
+## 5. Número de casos de tuberculose por país
+
+```{r}
+table1 %>%
+  group_by(country) %>%
+  summarise(casos = sum(cases))
+```
+
+## 6. Mudança no número de casos entre 1999 e 2000, por país
+
+```{r}
+table1 %>%
+  select(country, year, cases) %>%
+  pivot_wider(names_from = year, values_from = cases) %>%
+  mutate(mudanca = `2000` - `1999`)
+```
+
+## 7. Gráfico de linhas: taxa de casos por país ao longo do tempo
+
+```{r}
+ggplot(taxas, aes(x = year, y = rate, color = country, group = country)) +
+  geom_line() +
+  geom_point() +
+  scale_x_continuous(breaks = c(1999, 2000)) +
+  labs(
+    title = "Taxa de casos de tuberculose por 10.000 habitantes",
+    x = "Ano", y = "Taxa (por 10.000 hab.)", color = "País"
+  ) +
+  theme_minimal()
+```
+
+## 8. Taxa de casos para `table2` e para `table4a` + `table4b`
+
+**Taxa a partir de `table2`:**
+
+```{r}
+# 1) número de casos por país/ano
+casos_table2 <- table2 %>%
+  filter(type == "cases") %>%
+  select(country, year, cases = count)
+
+# 2) população por país/ano
+pop_table2 <- table2 %>%
+  filter(type == "population") %>%
+  select(country, year, population = count)
+
+# 3) e 4) junção, cálculo da taxa e armazenamento
+taxa_table2 <- left_join(casos_table2, pop_table2, by = c("country", "year")) %>%
+  mutate(rate = cases / population * 10000)
+
+taxa_table2
+```
+
+**Taxa a partir de `table4a` (casos) e `table4b` (população):**
+
+```{r}
+# 1) número de casos por país/ano (table4a está "larga": um ano por coluna)
+casos_table4 <- table4a %>%
+  pivot_longer(cols = c(`1999`, `2000`), names_to = "year", values_to = "cases") %>%
+  mutate(year = as.integer(year))
+
+# 2) população por país/ano (table4b está "larga": um ano por coluna)
+pop_table4 <- table4b %>%
+  pivot_longer(cols = c(`1999`, `2000`), names_to = "year", values_to = "population") %>%
+  mutate(year = as.integer(year))
+
+# 3) e 4) junção, cálculo da taxa e armazenamento
+taxa_table4 <- left_join(casos_table4, pop_table4, by = c("country", "year")) %>%
+  mutate(rate = cases / population * 10000)
+
+taxa_table4
+```
+
+## 9. Gráfico da questão 7 refeito com os dados de `table2`
+
+```{r}
+ggplot(taxa_table2, aes(x = year, y = rate, color = country, group = country)) +
+  geom_line() +
+  geom_point() +
+  scale_x_continuous(breaks = c(1999, 2000)) +
+  labs(
+    title = "Taxa de casos de tuberculose por 10.000 habitantes (a partir de table2)",
+    x = "Ano", y = "Taxa (por 10.000 hab.)", color = "País"
+  ) +
+  theme_minimal()
+```
+
+Como esperado, o gráfico é idêntico ao da questão 7, já que `table1` e `table2` descrevem os mesmos dados, apenas organizados de formas diferentes.
+
+## 10. Tornando `table4a` *tidy* com `pivot_longer`
+
+```{r}
+tidy4a <- table4a %>%
+  pivot_longer(cols = c(`1999`, `2000`), names_to = "year", values_to = "cases") %>%
+  mutate(year = as.integer(year))
+
+tidy4a
+```
+
+## 11. Tornando `table4b` *tidy* com `pivot_longer`
+
+```{r}
+tidy4b <- table4b %>%
+  pivot_longer(cols = c(`1999`, `2000`), names_to = "year", values_to = "population") %>%
+  mutate(year = as.integer(year))
+
+tidy4b
+```
+
+## 12. Combinando `tidy4a` e `tidy4b` com `left_join`
+
+```{r}
+tidy4 <- left_join(tidy4a, tidy4b, by = c("country", "year"))
+tidy4
+```
+
+O comando `left_join(x, y, by = ...)` combina as linhas de duas tabelas a partir de uma ou mais colunas-chave em comum (aqui, `country` e `year`). Todas as linhas da tabela à esquerda (`tidy4a`) são mantidas no resultado; para cada uma delas, o `left_join` procura na tabela à direita (`tidy4b`) uma linha com a mesma chave e, caso encontre, acrescenta as demais colunas dessa linha (aqui, `population`) ao resultado. Caso uma chave da tabela da esquerda não tenha correspondência na tabela da direita, as colunas vindas da direita ficam como `NA`. Neste caso, como `tidy4a` e `tidy4b` têm exatamente as mesmas combinações de `country` e `year`, o resultado é uma junção completa, reconstruindo uma tabela no mesmo formato de `table1`.
+
+## 13. Tornando `table2` *tidy* com `pivot_wider`
+
+```{r}
+table2_tidy <- table2 %>%
+  pivot_wider(names_from = type, values_from = count)
+
+table2_tidy
+```
+
+O comando `pivot_wider` faz o processo inverso do `pivot_longer`: ele espalha os valores de uma coluna (`type`) em novas colunas, usando outra coluna (`count`) para preencher os valores. Como `type` continha os nomes das variáveis `cases` e `population`, essas passam a ser colunas de fato, e cada linha volta a representar uma única observação (país-ano) — exatamente o formato de `table1`.
+
+## 14. Tornando `table3` *tidy* com `separate`
+
+```{r}
+table3_tidy <- table3 %>%
+  separate(rate, into = c("cases", "population"), sep = "/", convert = TRUE)
+
+table3_tidy
+```
+
+O argumento `convert = TRUE` faz com que o `separate` tente automaticamente converter as novas colunas (`cases` e `population`), que seriam criadas como texto, para o tipo numérico mais apropriado (aqui, inteiro), evitando a necessidade de um passo extra de conversão manual com `as.numeric()`.

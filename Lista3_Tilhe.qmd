@@ -1,0 +1,224 @@
+---
+title: "Lista 3 - Hands-On (Aula 03: DISTINCT, AND-OR-NOT)"
+author: "Pedro Tilhe"
+date: today
+format: pdf
+editor: visual
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r horario, echo=TRUE}
+# Registra o horário de compilação no fuso horário do Brasil
+Sys.setenv(TZ = "America/Sao_Paulo")
+cat("Documento compilado em:", format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"))
+```
+
+```{r conexao, message=FALSE}
+library(DBI)
+library(RSQLite)
+
+# Conecta ao banco de dados criado na aula anterior
+con <- dbConnect(RSQLite::SQLite(), "datasets/me315.sqlite")
+```
+
+## 1. `STATE` e `FEE` da tabela `PRESERVE`, sem duplicados
+
+```{sql, connection=con}
+SELECT DISTINCT STATE, FEE FROM PRESERVE
+```
+
+## 2. Valores de `DNO` na tabela `EMPLOYEE`, sem duplicados
+
+```{sql, connection=con}
+SELECT DISTINCT DNO FROM EMPLOYEE
+```
+
+## 3. Comparação das três QUERYS
+
+```{sql, connection=con}
+SELECT DNO, SALARY FROM EMPLOYEE
+```
+
+```{sql, connection=con}
+SELECT DISTINCT DNO, SALARY FROM EMPLOYEE
+```
+
+```{sql, connection=con}
+SELECT DISTINCT DNO, SALARY FROM EMPLOYEE ORDER BY DNO, SALARY
+```
+
+**Observação:** as três consultas retornam o mesmo conjunto de 6 linhas. Isso
+acontece porque não existem dois funcionários com o mesmo par (`DNO`,
+`SALARY`) na tabela — ou seja, não há linhas duplicadas para o `DISTINCT`
+eliminar. A única diferença entre a 2ª e a 3ª é que a última aparece ordenada
+primeiro por `DNO` e, dentro de cada `DNO`, por `SALARY`.
+
+## 4. Reservas em Montana com menos de 1.000 acres
+
+```{sql, connection=con}
+SELECT * FROM PRESERVE
+WHERE STATE = 'MT' AND ACRES < 1000
+```
+
+## 5. Reservas com `ACRES` entre 1.200 e 15.000 (inclusive)
+
+```{sql, connection=con}
+SELECT * FROM PRESERVE
+WHERE ACRES BETWEEN 1200 AND 15000
+```
+
+**Observação:** duas reservas atendem esse critério: `PINE BUTTE SWAMP`
+(MT, 15.000 acres) e `PAPAGONIA-SONOITA CREEK` (AZ, 1.200 acres).
+
+## 6. Montana, sem taxa de entrada, mais de 10.000 acres
+
+```{sql, connection=con}
+SELECT * FROM PRESERVE
+WHERE STATE = 'MT' AND FEE = 0 AND ACRES > 10000
+```
+
+**Observação:** apenas `PINE BUTTE SWAMP` (MT, 15.000 acres, taxa 0)
+atende esse critério.
+
+## 7. Reservas em Montana ou Massachusetts
+
+```{sql, connection=con}
+SELECT * FROM PRESERVE
+WHERE STATE = 'MT' OR STATE = 'MA'
+```
+
+## 8. Reservas em Montana, ou qualquer reserva com menos de 1.000 acres
+
+```{sql, connection=con}
+SELECT * FROM PRESERVE
+WHERE STATE = 'MT' OR ACRES < 1000
+```
+
+## 9. Número e nome das reservas com taxa de entrada diferente de zero
+
+```{sql, connection=con}
+SELECT PNO, PNAME FROM PRESERVE
+WHERE FEE <> 0
+```
+
+## 10. Número e nome das reservas sem taxa de US$ 3,00 e sem taxa de US$ 10,00
+
+```{sql, connection=con}
+SELECT PNO, PNAME FROM PRESERVE
+WHERE FEE <> 3 AND FEE <> 10
+```
+
+## 11. Arizona sem taxa de entrada, ou qualquer reserva com menos de 100 acres
+
+```{sql, connection=con}
+SELECT * FROM PRESERVE
+WHERE (STATE = 'AZ' AND FEE = 0) OR ACRES < 100
+```
+
+## 12. Menos de 1.000 acres, e (taxa zero ou localizada no Arizona)
+
+```{sql, connection=con}
+SELECT * FROM PRESERVE
+WHERE ACRES < 1000 AND (FEE = 0 OR STATE = 'AZ')
+```
+
+## 13. Taxa de entrada não maior que zero, ou reserva de Montana com mais de 1.000 acres
+
+```{sql, connection=con}
+SELECT * FROM PRESERVE
+WHERE NOT (FEE > 0) OR (STATE = 'MT' AND ACRES > 1000)
+```
+
+## 14. Todas as reservas, exceto as de Montana sem taxa de entrada
+
+```{sql, connection=con}
+SELECT * FROM PRESERVE
+WHERE NOT (STATE = 'MT' AND FEE = 0)
+```
+
+## 15. Equivalência lógica
+
+```
+WHERE STATE = 'MA' AND (ACRES > 1000 OR FEE = 0.0)
+WHERE (STATE = 'MA' AND ACRES > 1000) OR (STATE = 'MA' AND FEE = 0.0)
+```
+
+**São equivalentes.** Isso é a propriedade distributiva do `AND` sobre o
+`OR`: `A AND (B OR C) = (A AND B) OR (A AND C)`.
+
+## 16. Equivalência lógica
+
+```
+WHERE STATE = 'MA' OR (ACRES > 1000 AND FEE = 0.0)
+WHERE (STATE = 'MA' OR ACRES > 1000) AND (STATE = 'MA' OR FEE = 0.0)
+```
+
+**São equivalentes.** Agora é a propriedade distributiva do `OR` sobre o
+`AND`: `A OR (B AND C) = (A OR B) AND (A OR C)`.
+
+## 17. Equivalência lógica
+
+```
+WHERE NOT (ACRES < 50 AND STATE = 'MA')
+WHERE NOT ACRES < 50 AND NOT STATE = 'MA'
+WHERE ACRES >= 50 OR STATE <> 'MA'
+```
+
+Pela Lei de De Morgan, `NOT (P AND Q) = (NOT P) OR (NOT Q)`. Logo a forma
+correta da negação usaria **OR**, não AND. Isso significa que a 1ª e a 3ª
+cláusulas são equivalentes entre si, mas a **2ª não é equivalente** às
+outras duas (ela usa `AND` onde deveria usar `OR`).
+
+Verificando nos dados (`PNO` retornados):
+
+```{sql, connection=con}
+SELECT PNO FROM PRESERVE WHERE NOT (ACRES < 50 AND STATE = 'MA')
+```
+
+```{sql, connection=con}
+SELECT PNO FROM PRESERVE WHERE NOT ACRES < 50 AND NOT STATE = 'MA'
+```
+
+```{sql, connection=con}
+SELECT PNO FROM PRESERVE WHERE ACRES >= 50 OR STATE <> 'MA'
+```
+
+A 1ª e a 3ª retornam os mesmos 12 registros; a 2ª retorna apenas 8,
+confirmando que ela **não** é equivalente às demais.
+
+## 18. Equivalência lógica
+
+```
+WHERE NOT (ACRES < 50 OR STATE = 'MA')
+WHERE NOT ACRES < 50 OR NOT STATE = 'MA'
+WHERE NOT ACRES < 50 AND NOT STATE = 'MA'
+```
+
+Pela Lei de De Morgan, `NOT (P OR Q) = (NOT P) AND (NOT Q)`. Logo a forma
+correta da negação usaria **AND**. Isso significa que a 1ª e a 3ª cláusulas
+são equivalentes entre si, mas a **2ª não é equivalente** às outras duas
+(ela usa `OR` onde deveria usar `AND`).
+
+Verificando nos dados (`PNO` retornados):
+
+```{sql, connection=con}
+SELECT PNO FROM PRESERVE WHERE NOT (ACRES < 50 OR STATE = 'MA')
+```
+
+```{sql, connection=con}
+SELECT PNO FROM PRESERVE WHERE NOT ACRES < 50 OR NOT STATE = 'MA'
+```
+
+```{sql, connection=con}
+SELECT PNO FROM PRESERVE WHERE NOT ACRES < 50 AND NOT STATE = 'MA'
+```
+
+A 1ª e a 3ª retornam os mesmos 8 registros; a 2ª retorna 12, confirmando que
+ela **não** é equivalente às demais.
+
+```{r fecha, include=FALSE}
+dbDisconnect(con)
+```

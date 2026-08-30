@@ -1,0 +1,172 @@
+---
+title: "Laboratório 3 - Dados relacionais e operações do tipo join"
+author: "Pedro Tilhe"
+date: today
+format: pdf
+editor: visual
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## Carregue os pacotes relevantes para este Laboratório
+
+```{r pacotes}
+library(readr)
+library(dplyr)
+library(leaflet)
+```
+
+## Atrasos de vôos
+
+### 1. Importação dos três arquivos
+
+Os arquivos `airlines.csv` e `airports.csv` estão na pasta `dados/`. O
+arquivo `flights.csv` é grande (~590 MB) e está compactado em
+`flights.csv.zip`; ele é descompactado apenas se ainda não existir.
+
+```{r importa-pequenos}
+airlines <- read_csv("dados/airlines.csv")
+
+airports <- read_csv(
+  "dados/airports.csv",
+  col_select = c(IATA_CODE, CITY, STATE, LATITUDE, LONGITUDE)
+)
+
+airlines
+airports
+```
+
+Para `flights.csv`, como o arquivo é grande, ele é lido em pedaços
+("chunks") de 1 milhão de linhas por vez com `read_csv_chunked()`. Para
+cada pedaço: mantemos apenas `DESTINATION_AIRPORT` e `ARRIVAL_DELAY`,
+removemos vôos cujo aeroporto de destino começa com "1" (esses são
+códigos numéricos de aeroporto sem `IATA_CODE` correspondente, que não
+aparecem em `airports.csv`) e removemos registros com alguma coluna
+faltante. Em seguida calculamos, para cada aeroporto, a soma dos
+atrasos e a contagem de vôos — essas duas quantidades são as
+"estatísticas suficientes" para depois obter a média (basta dividir a
+soma acumulada pela contagem acumulada), sem precisar manter o arquivo
+inteiro em memória.
+
+```{r importa-flights}
+if (!file.exists("flights.csv")) {
+  unzip("flights.csv.zip")
+}
+
+estatisticas_parciais <- list()
+
+processa_pedaco <- function(pedaco, pos) {
+  pedaco <- pedaco %>%
+    filter(!startsWith(DESTINATION_AIRPORT, "1")) %>%
+    na.omit()
+
+  resumo <- pedaco %>%
+    group_by(DESTINATION_AIRPORT) %>%
+    summarise(soma_atraso = sum(ARRIVAL_DELAY), n_voos = n(), .groups = "drop")
+
+  estatisticas_parciais[[length(estatisticas_parciais) + 1]] <<- resumo
+}
+
+read_csv_chunked(
+  "flights.csv",
+  callback = SideEffectChunkCallback$new(processa_pedaco),
+  chunk_size = 1e6,
+  col_types = cols_only(
+    DESTINATION_AIRPORT = col_character(),
+    ARRIVAL_DELAY = col_double()
+  )
+)
+
+# Combina as estatísticas suficientes de todos os pedaços
+flights <- bind_rows(estatisticas_parciais) %>%
+  group_by(DESTINATION_AIRPORT) %>%
+  summarise(soma_atraso = sum(soma_atraso), n_voos = sum(n_voos), .groups = "drop") %>%
+  mutate(atraso_medio = soma_atraso / n_voos)
+
+flights
+```
+
+**Conferência:** com os dados completos (2015, ~5,8 milhões de vôos), depois
+de remover os ~307 códigos numéricos e os registros incompletos, restam
+5.231.130 vôos válidos e exatamente **322 aeroportos de destino distintos**
+— o mesmo número de linhas de `airports.csv`.
+
+### 2. *Join* de `flights` com `airports`
+
+a. A chave em `flights` é `DESTINATION_AIRPORT`.
+b. A chave em `airports` é `IATA_CODE`.
+c. Aeroportos que aparecem em `flights` mas estão ausentes em `airports`:
+
+```{r antijoin}
+anti_join(flights, airports, by = c("DESTINATION_AIRPORT" = "IATA_CODE"))
+```
+
+Não há nenhum (o resultado é uma tabela vazia). Isso porque o passo 1.c
+já havia removido os códigos numéricos que começam com "1" — são
+justamente esses códigos que não têm correspondência em `airports.csv`.
+Depois dessa limpeza, todo aeroporto de destino de `flights` tem uma
+linha correspondente em `airports`.
+
+d. Como queremos manter todos os registros de `flights` (mesmo que, em
+outra situação, algum não tivesse par em `airports`), a operação
+apropriada é o `left_join`, usando `DESTINATION_AIRPORT` (`flights`) e
+`IATA_CODE` (`airports`) como chaves:
+
+```{r join}
+flights <- left_join(flights, airports,
+                      by = c("DESTINATION_AIRPORT" = "IATA_CODE"))
+flights
+```
+
+e. A tabela resultante já foi armazenada de volta no objeto `flights`.
+
+### 3. Quantidade de aeroportos por estado
+
+```{r por-estado}
+aeroportos_por_estado <- airports %>%
+  group_by(STATE) %>%
+  summarise(n_aeroportos = n(), .groups = "drop") %>%
+  arrange(desc(n_aeroportos))
+
+aeroportos_por_estado
+```
+
+Os estados (e territórios) com mais aeroportos no arquivo são Texas
+(24), Califórnia (22) e Alasca (19).
+
+### 4. Mapa dos atrasos por aeroporto
+
+```{r mapa}
+# a. pacote leaflet já carregado no início do documento
+
+# b. e c. mapa básico armazenado em `this`
+mapa_dados <- flights %>% filter(!is.na(LATITUDE), !is.na(LONGITUDE))
+
+this <- leaflet(mapa_dados) %>%
+  addTiles() %>%
+  addMarkers(
+    lng = ~LONGITUDE,
+    lat = ~LATITUDE,
+    popup = ~paste0(DESTINATION_AIRPORT, ": ", round(atraso_medio, 1), " min")
+  )
+
+this
+```
+
+```{r jupyter-only, eval=FALSE}
+# d. apenas se estiver usando Jupyter (não necessário no RStudio/Quarto):
+# library(IRdisplay)
+# display(this)
+```
+
+**Observação:** 3 aeroportos (`ECP`, `PBG`, `UST`) não têm latitude/longitude
+em `airports.csv` e por isso foram excluídos do mapa.
+
+## Horário de compilação
+
+```{r horario}
+Sys.setenv(TZ = "America/Sao_Paulo")
+Sys.time()
+```

@@ -1,0 +1,201 @@
+---
+title: "Lista 4 - Hands-on (IN, BETWEEN e LIKE)"
+author: "Pedro Monteiro Tilhe - RA 254672"
+date: today
+format: pdf
+---
+
+```{r setup, include=FALSE}
+library(DBI)
+library(RSQLite)
+
+con <- dbConnect(RSQLite::SQLite(), "datasets/me315.sqlite")
+knitr::opts_chunk$set(connection = "con")
+```
+
+## Reservas naturais (tabela `PRESERVE`)
+
+### 1. Reservas com número de reserva em {2, 4, 6, 8, 10}
+
+```{sql}
+SELECT *
+FROM PRESERVE
+WHERE PNO IN (2, 4, 6, 8, 10);
+```
+
+### 2. Todas as reservas, exceto DANCING PRAIRIE, MULESHOE RANCH, MCELWAIN-OLSEN e TATKON
+
+```{sql}
+SELECT *
+FROM PRESERVE
+WHERE PNAME NOT IN ('DANCING PRAIRIE', 'MULESHOE RANCH', 'MCELWAIN-OLSEN', 'TATKON');
+```
+
+### 3. Reservas com PNO entre 3 e 10 (inclusive)
+
+```{sql}
+SELECT *
+FROM PRESERVE
+WHERE PNO BETWEEN 3 AND 10;
+```
+
+### 4. Reservas com PNO menor que 3 ou maior que 10
+
+```{sql}
+SELECT *
+FROM PRESERVE
+WHERE PNO NOT BETWEEN 3 AND 10;
+```
+
+### 5. Estado, número e tamanho das reservas fora de Montana e do Arizona, com até 800 acres, ordenadas pelo número em ordem descendente
+
+```{sql}
+SELECT STATE, PNO, ACRES
+FROM PRESERVE
+WHERE STATE NOT IN ('MT', 'AZ')
+  AND ACRES <= 800
+ORDER BY PNO DESC;
+```
+
+### 6. Nome das reservas que começam com a letra 'D'
+
+```{sql}
+SELECT PNAME
+FROM PRESERVE
+WHERE PNAME LIKE 'D%';
+```
+
+### 7. Nome das reservas que contenham 'TOWN' em qualquer lugar do nome
+
+```{sql}
+SELECT PNAME
+FROM PRESERVE
+WHERE PNAME LIKE '%TOWN%';
+```
+
+### 8. Nome das reservas que terminem em 'PRAIRIE'
+
+```{sql}
+SELECT PNAME
+FROM PRESERVE
+WHERE PNAME LIKE '%PRAIRIE';
+```
+
+### 9. Nome das reservas que contenham a string 'ING' em qualquer lugar do nome
+
+```{sql}
+SELECT PNAME
+FROM PRESERVE
+WHERE PNAME LIKE '%ING%';
+```
+
+### 10. Nome das reservas cujo nome termine com a letra 'E'
+
+```{sql}
+SELECT PNAME
+FROM PRESERVE
+WHERE PNAME LIKE '%E';
+```
+
+### 11. Nome das reservas com a letra 'E' imediatamente após a letra 'M'
+
+```{sql}
+SELECT PNAME
+FROM PRESERVE
+WHERE PNAME LIKE '%ME%';
+```
+
+### 12. Nome das reservas com a letra 'E' em qualquer lugar após a letra 'M'
+
+```{sql}
+SELECT PNAME
+FROM PRESERVE
+WHERE PNAME LIKE '%M%E%';
+```
+
+### 13. Nome das reservas com a letra 'A' na segunda posição
+
+```{sql}
+SELECT PNAME
+FROM PRESERVE
+WHERE PNAME LIKE '_A%';
+```
+
+### 14. Nome das reservas com um espaço em branco em qualquer lugar do nome
+
+```{sql}
+SELECT PNAME
+FROM PRESERVE
+WHERE PNAME LIKE '% %';
+```
+
+### 15. Nome das reservas que contenham 'FARM', 'SWAMP' ou 'PRAIRIE' em qualquer lugar do nome
+
+```{sql}
+SELECT PNAME
+FROM PRESERVE
+WHERE PNAME LIKE '%FARM%'
+   OR PNAME LIKE '%SWAMP%'
+   OR PNAME LIKE '%PRAIRIE%';
+```
+
+### 16. Nome das reservas com um ponto ou um hífen em qualquer lugar do nome
+
+```{sql}
+SELECT PNAME
+FROM PRESERVE
+WHERE PNAME LIKE '%.%'
+   OR PNAME LIKE '%-%';
+```
+
+### 17. Nome das reservas com a letra 'R' na quinta posição e que terminem com 'PRAIRIE'
+
+```{sql}
+SELECT PNAME
+FROM PRESERVE
+WHERE PNAME LIKE '____R%PRAIRIE';
+```
+
+## Funcionários (tabela `EMPLOYEE`)
+
+### 18. Funcionários de departamentos com DNO em {10, 40}
+
+```{sql}
+SELECT *
+FROM EMPLOYEE
+WHERE DNO IN (10, 40);
+```
+
+### 19. Funcionários de departamentos com DNO fora de {10, 40}
+
+```{sql}
+SELECT *
+FROM EMPLOYEE
+WHERE DNO NOT IN (10, 40);
+```
+
+### 20. Funcionários com salário entre $500,00 e $2.000,00 (inclusive)
+
+```{sql}
+SELECT *
+FROM EMPLOYEE
+WHERE SALARY BETWEEN 500 AND 2000;
+```
+
+### 21. Funcionários com salário menor que $500,00 ou maior que $2.000,00
+
+```{sql}
+SELECT *
+FROM EMPLOYEE
+WHERE SALARY NOT BETWEEN 500 AND 2000;
+```
+
+```{r cleanup, include=FALSE}
+dbDisconnect(con)
+```
+
+## Data e hora de compilação
+
+```{r timestamp, echo=FALSE}
+format(Sys.time(), "%d/%m/%Y %H:%M:%S")
+```

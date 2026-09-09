@@ -1,0 +1,105 @@
+---
+title: "Laboratório 4 - Importação de Dados Retangulares (Excel)"
+author: "Pedro Monteiro Tilhe - RA 254672"
+date: today
+format: pdf
+---
+
+## Contexto
+
+Dados sobre indicadores de desenvolvimento mundial (World Development Indicators - WDI),
+fornecidos pelo Banco Mundial, no arquivo `WDIEXCEL.xlsx`.
+
+### 1-2. Pacotes e caminho do arquivo
+
+```{r setup}
+library(readxl)
+library(tidyverse)
+
+fname <- "datasets/WDIEXCEL.xlsx"
+file.exists(fname)
+```
+
+### 3-4. Planilha `Country`: apenas 5 países (Brasil e outros 4)
+
+```{r}
+countries <- read_excel(fname, sheet = "Country")
+
+countries <- countries %>%
+  filter(`Country Code` %in% c("BRA", "USA", "CHN", "DEU", "ZAF"))
+
+countries %>% select(`Country Code`, `Short Name`, Region)
+```
+
+### 5-6. Planilha `Data`: Country Code, Indicator Code e anos 1960-2018
+
+```{r}
+WDI <- read_excel(fname, sheet = "Data")
+
+WDI <- WDI %>%
+  select(`Country Code`, `Indicator Code`, `1960`:`2018`)
+```
+
+### 7. Formato tidy (coluna `YEAR`)
+
+Os anos estão espalhados em colunas (formato largo). Para deixar tidy, cada
+ano deve virar uma linha, com uma coluna `YEAR` indicando o ano e uma coluna
+com o valor do indicador.
+
+```{r}
+WDI <- WDI %>%
+  pivot_longer(
+    cols = `1960`:`2018`,
+    names_to = "YEAR",
+    values_to = "VALUE"
+  )
+```
+
+### 8. Coluna `YEAR` como inteiro
+
+```{r}
+class(WDI$YEAR)
+
+WDI <- WDI %>%
+  mutate(YEAR = as.integer(YEAR))
+
+class(WDI$YEAR)
+```
+
+### 9. Filtrar países de `countries` e selecionar indicador `SP.DYN.CBRT.IN`
+
+```{r}
+WDI <- WDI %>%
+  filter(`Country Code` %in% countries$`Country Code`) %>%
+  filter(`Indicator Code` == "SP.DYN.CBRT.IN") %>%
+  pivot_wider(names_from = `Indicator Code`, values_from = VALUE) %>%
+  left_join(countries %>% select(`Country Code`, `Short Name`), by = "Country Code") %>%
+  select(`Country Code`, `Short Name`, YEAR, `SP.DYN.CBRT.IN`)
+```
+
+### 10. Ordenar por país e ano
+
+```{r}
+WDI <- WDI %>%
+  arrange(`Short Name`, YEAR)
+
+WDI
+```
+
+### 11. Gráfico de linhas (taxa de natalidade por país ao longo do tempo)
+
+```{r}
+ggplot(WDI, aes(x = YEAR, y = `SP.DYN.CBRT.IN`, color = `Short Name`)) +
+  geom_line() +
+  labs(
+    x = "Ano",
+    y = "Taxa de natalidade (nascimentos por 1.000 habitantes)",
+    color = "País"
+  )
+```
+
+## Data e hora de compilação
+
+```{r timestamp, echo=FALSE}
+format(Sys.time(), "%d/%m/%Y %H:%M:%S")
+```

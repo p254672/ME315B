@@ -1,0 +1,208 @@
+---
+title: "Laboratório 7 - SQLite Parte II (UW-Madison)"
+author: "Pedro Monteiro Tilhe - RA 254672"
+date: today
+format: pdf
+---
+
+```{r setup}
+library(DBI)
+library(RSQLite)
+
+conn <- dbConnect(SQLite(), "datasets/uwmadison.sqlite3")
+knitr::opts_chunk$set(connection = "conn")
+```
+
+### 1. Conexão com o banco de dados
+
+```{r}
+dbListTables(conn)
+```
+
+### 2. Professores que lecionaram disciplinas de Estatística
+
+```{sql}
+SELECT COUNT(DISTINCT i.id) AS N_PROFESSORES
+FROM subjects s
+INNER JOIN subject_memberships sm ON sm.subject_code = s.code
+INNER JOIN sections sec ON sec.course_offering_uuid = sm.course_offering_uuid
+INNER JOIN teachings t ON t.section_uuid = sec.uuid
+INNER JOIN instructors i ON i.id = t.instructor_id
+WHERE s.abbreviation = 'STAT';
+```
+
+```{sql}
+SELECT DISTINCT i.id AS ID, i.name AS PROFESSOR
+FROM subjects s
+INNER JOIN subject_memberships sm ON sm.subject_code = s.code
+INNER JOIN sections sec ON sec.course_offering_uuid = sm.course_offering_uuid
+INNER JOIN teachings t ON t.section_uuid = sec.uuid
+INNER JOIN instructors i ON i.id = t.instructor_id
+WHERE s.abbreviation = 'STAT'
+ORDER BY i.name;
+```
+
+### 3. Nota média (GPA) de cada oferecimento
+
+```{sql}
+SELECT gd.course_offering_uuid AS OFERECIMENTO,
+       SUM(gd.a_count*4.0 + gd.ab_count*3.5 + gd.b_count*3.0 + gd.bc_count*2.5
+           + gd.c_count*2.0 + gd.d_count*1.0 + gd.f_count*0.0)
+       / SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count
+             + gd.c_count + gd.d_count + gd.f_count) AS GPA
+FROM grade_distributions gd
+INNER JOIN subject_memberships sm
+        ON sm.course_offering_uuid = gd.course_offering_uuid
+INNER JOIN subjects s ON s.code = sm.subject_code
+WHERE s.abbreviation = 'STAT'
+GROUP BY gd.course_offering_uuid
+HAVING SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count
+           + gd.c_count + gd.d_count + gd.f_count) > 0
+ORDER BY GPA;
+```
+
+#### Professor mais difícil
+
+```{sql}
+WITH stat_off AS (
+  SELECT DISTINCT sm.course_offering_uuid AS off_uuid
+  FROM subject_memberships sm
+  INNER JOIN subjects s ON s.code = sm.subject_code
+  WHERE s.abbreviation = 'STAT'
+),
+gpa_off AS (
+  SELECT gd.course_offering_uuid AS off_uuid,
+         SUM(gd.a_count*4.0 + gd.ab_count*3.5 + gd.b_count*3.0 + gd.bc_count*2.5
+             + gd.c_count*2.0 + gd.d_count*1.0 + gd.f_count*0.0)
+         / SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count
+               + gd.c_count + gd.d_count + gd.f_count) AS gpa
+  FROM grade_distributions gd
+  INNER JOIN stat_off so ON so.off_uuid = gd.course_offering_uuid
+  GROUP BY gd.course_offering_uuid
+  HAVING SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count
+             + gd.c_count + gd.d_count + gd.f_count) > 0
+),
+prof_off AS (
+  SELECT DISTINCT t.instructor_id AS iid, sec.course_offering_uuid AS off_uuid
+  FROM teachings t
+  INNER JOIN sections sec ON sec.uuid = t.section_uuid
+  INNER JOIN stat_off so ON so.off_uuid = sec.course_offering_uuid
+)
+SELECT i.name AS PROFESSOR, AVG(g.gpa) AS GPA_MEDIO
+FROM prof_off p
+INNER JOIN gpa_off g ON g.off_uuid = p.off_uuid
+INNER JOIN instructors i ON i.id = p.iid
+GROUP BY p.iid, i.name
+ORDER BY GPA_MEDIO ASC
+LIMIT 1;
+```
+
+#### Professor mais fácil
+
+```{sql}
+WITH stat_off AS (
+  SELECT DISTINCT sm.course_offering_uuid AS off_uuid
+  FROM subject_memberships sm
+  INNER JOIN subjects s ON s.code = sm.subject_code
+  WHERE s.abbreviation = 'STAT'
+),
+gpa_off AS (
+  SELECT gd.course_offering_uuid AS off_uuid,
+         SUM(gd.a_count*4.0 + gd.ab_count*3.5 + gd.b_count*3.0 + gd.bc_count*2.5
+             + gd.c_count*2.0 + gd.d_count*1.0 + gd.f_count*0.0)
+         / SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count
+               + gd.c_count + gd.d_count + gd.f_count) AS gpa
+  FROM grade_distributions gd
+  INNER JOIN stat_off so ON so.off_uuid = gd.course_offering_uuid
+  GROUP BY gd.course_offering_uuid
+  HAVING SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count
+             + gd.c_count + gd.d_count + gd.f_count) > 0
+),
+prof_off AS (
+  SELECT DISTINCT t.instructor_id AS iid, sec.course_offering_uuid AS off_uuid
+  FROM teachings t
+  INNER JOIN sections sec ON sec.uuid = t.section_uuid
+  INNER JOIN stat_off so ON so.off_uuid = sec.course_offering_uuid
+)
+SELECT i.name AS PROFESSOR, AVG(g.gpa) AS GPA_MEDIO
+FROM prof_off p
+INNER JOIN gpa_off g ON g.off_uuid = p.off_uuid
+INNER JOIN instructors i ON i.id = p.iid
+GROUP BY p.iid, i.name
+HAVING COUNT(*) >= 5
+ORDER BY GPA_MEDIO DESC
+LIMIT 1;
+```
+
+#### Disciplina mais difícil
+
+```{sql}
+WITH stat_off AS (
+  SELECT DISTINCT sm.course_offering_uuid AS off_uuid
+  FROM subject_memberships sm
+  INNER JOIN subjects s ON s.code = sm.subject_code
+  WHERE s.abbreviation = 'STAT'
+),
+gpa_off AS (
+  SELECT gd.course_offering_uuid AS off_uuid,
+         SUM(gd.a_count*4.0 + gd.ab_count*3.5 + gd.b_count*3.0 + gd.bc_count*2.5
+             + gd.c_count*2.0 + gd.d_count*1.0 + gd.f_count*0.0)
+         / SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count
+               + gd.c_count + gd.d_count + gd.f_count) AS gpa
+  FROM grade_distributions gd
+  INNER JOIN stat_off so ON so.off_uuid = gd.course_offering_uuid
+  GROUP BY gd.course_offering_uuid
+  HAVING SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count
+             + gd.c_count + gd.d_count + gd.f_count) > 0
+)
+SELECT c.number AS NUMERO, c.name AS DISCIPLINA, AVG(g.gpa) AS GPA_MEDIO
+FROM gpa_off g
+INNER JOIN course_offerings co ON co.uuid = g.off_uuid
+INNER JOIN courses c ON c.uuid = co.course_uuid
+GROUP BY c.uuid, c.number, c.name
+ORDER BY GPA_MEDIO ASC
+LIMIT 1;
+```
+
+#### Disciplina mais fácil
+
+```{sql}
+WITH stat_off AS (
+  SELECT DISTINCT sm.course_offering_uuid AS off_uuid
+  FROM subject_memberships sm
+  INNER JOIN subjects s ON s.code = sm.subject_code
+  WHERE s.abbreviation = 'STAT'
+),
+gpa_off AS (
+  SELECT gd.course_offering_uuid AS off_uuid,
+         SUM(gd.a_count*4.0 + gd.ab_count*3.5 + gd.b_count*3.0 + gd.bc_count*2.5
+             + gd.c_count*2.0 + gd.d_count*1.0 + gd.f_count*0.0)
+         / SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count
+               + gd.c_count + gd.d_count + gd.f_count) AS gpa
+  FROM grade_distributions gd
+  INNER JOIN stat_off so ON so.off_uuid = gd.course_offering_uuid
+  GROUP BY gd.course_offering_uuid
+  HAVING SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count
+             + gd.c_count + gd.d_count + gd.f_count) > 0
+)
+SELECT c.number AS NUMERO, c.name AS DISCIPLINA, AVG(g.gpa) AS GPA_MEDIO
+FROM gpa_off g
+INNER JOIN course_offerings co ON co.uuid = g.off_uuid
+INNER JOIN courses c ON c.uuid = co.course_uuid
+GROUP BY c.uuid, c.number, c.name
+HAVING COUNT(*) >= 5
+ORDER BY GPA_MEDIO DESC
+LIMIT 1;
+```
+
+### 4. Desconectar do banco de dados
+
+```{r}
+dbDisconnect(conn)
+```
+
+## Data e hora de compilação
+
+```{r timestamp, echo=FALSE}
+format(Sys.time(), "%d/%m/%Y %H:%M:%S")
+```

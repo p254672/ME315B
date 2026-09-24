@@ -1,0 +1,216 @@
+---
+title: "Lista 6"
+author: "Pedro Monteiro Tilhe - RA 254672"
+date: today
+format: pdf
+---
+
+## Configurando o RStudio
+
+```{r setup}
+library(DBI)
+library(RSQLite)
+knitr::opts_chunk$set(max.print = Inf)
+
+con <- dbConnect(RSQLite::SQLite(), "datasets/me315.sqlite")
+knitr::opts_chunk$set(connection = "con")
+```
+
+## Reservas naturais (tabela `PRESERVE`)
+
+### 1. Menor área de preservação por estado
+
+Para cada estado mencionado na tabela `PRESERVE`, exiba o valor de `ACRES` da
+menor área de preservação natural localizada nesse estado.
+
+```{sql}
+SELECT STATE, MIN(ACRES)
+FROM PRESERVE
+GROUP BY STATE;
+```
+
+### 2. Maior área por estado, desconsiderando áreas com mais de 10.000 acres
+
+Não considere nenhuma área de preservação natural que tenha mais de 10.000
+acres. Para cada estado mencionado na tabela `PRESERVE`, exiba o valor de
+`ACRES` da maior área de preservação natural localizada nesse estado.
+
+```{sql}
+SELECT STATE, MAX(ACRES)
+FROM PRESERVE
+WHERE ACRES <=10000
+GROUP BY STATE;
+```
+
+### 3. Resultado anterior ordenado pelos máximos em ordem decrescente
+
+Na tabela resultante anterior, ordene os resultados pelos valores máximos, em
+ordem decrescente.
+
+```{sql}
+SELECT STATE, MAX(ACRES)
+FROM PRESERVE
+WHERE ACRES <=10000
+GROUP BY STATE
+ORDER BY MAX(ACRES) DESC;
+```
+
+### 4. Maior área por estado, desde que inferior a 25.000 acres
+
+Exiba o tamanho, em acres, da maior área de preservação natural de cada
+estado, desde que esse valor seja inferior a 25.000 acres.
+
+```{sql}
+SELECT STATE, MAX(ACRES)
+FROM PRESERVE
+GROUP BY STATE
+HAVING MAX(ACRES) < 25000;
+```
+
+### 5. Menor área por estado, desde que inferior a 100 acres
+
+Para cada estado mencionado na tabela `PRESERVE`, exiba o número de acres da
+menor área de preservação do estado, desde que esse número seja inferior a
+100 acres.
+
+```{sql}
+SELECT STATE, MIN(ACRES)
+FROM PRESERVE
+GROUP BY STATE
+HAVING MIN(ACRES) < 100;
+```
+
+### 6. Nome e tamanho da maior área por estado (áreas com mais de 1.000 acres)
+
+Considere apenas as áreas de preservação natural com mais de 1.000 acres. Para
+cada estado, exiba o nome e o tamanho (em acres) da maior área de preservação
+natural desse estado, desde que esse valor seja inferior a 25.000 acres.
+
+```{sql}
+SELECT STATE, PNAME, MAX(ACRES)
+FROM PRESERVE
+WHERE ACRES > 1000
+GROUP BY STATE
+HAVING MAX(ACRES) < 25000;
+```
+
+### 7. Tamanho total por estado entre 10.000 e 50.000 acres
+
+Exiba o estado e o tamanho total, em acres, das áreas de preservação
+localizadas nesse estado, desde que o tamanho total seja maior ou igual a
+10.000 acres e menor ou igual a 50.000 acres.
+
+```{sql}
+SELECT STATE, SUM(ACRES) AS TOTAL_ACRES
+FROM PRESERVE
+GROUP BY STATE
+HAVING SUM(ACRES) BETWEEN 10000 AND 50000;
+```
+
+### 8. Maior média de acres por estado
+
+Determine a quantidade média de acres das áreas de preservação para cada
+estado e, em seguida, exiba a maior dessas médias.
+
+```{sql}
+SELECT MAX(MEDIA_ACRES) AS MAIOR_MEDIA
+FROM (
+  SELECT STATE, AVG(ACRES) AS MEDIA_ACRES
+  FROM PRESERVE
+  GROUP BY STATE
+);
+```
+
+## Funcionários (tabela `EMPLOYEE`)
+
+Os seguintes exercícios utilizam a tabela `EMPLOYEE`.
+
+### 9. Salário médio por departamento
+
+Para todos os valores de `DNO` dos departamentos encontrados na tabela
+`EMPLOYEE`, exiba o valor de `DNO`, seguido pelo salário médio daquele
+departamento.
+
+```{sql}
+SELECT DNO, AVG(SALARY) AS SALARIO_MEDIO
+FROM EMPLOYEE
+GROUP BY DNO;
+```
+
+### 10. Soma, máximo e mínimo dos salários por departamento
+
+Para todos os valores de `DNO` dos departamentos encontrados na tabela
+`EMPLOYEE`, exiba o valor de `DNO`, seguido pela soma, pelo máximo e pelo
+mínimo dos salários daquele departamento.
+
+```{sql}
+SELECT DNO,
+       SUM(SALARY) AS SOMA,
+       MAX(SALARY) AS MAXIMO,
+       MIN(SALARY) AS MINIMO
+FROM EMPLOYEE
+GROUP BY DNO;
+```
+
+### 11. Número de funcionários por departamento, exceto o Departamento 40
+
+Considere todos os departamentos, exceto o Departamento 40. Para esses
+departamentos, exiba o valor de `DNO`, seguido pelo número de funcionários que
+trabalham em cada departamento.
+
+```{sql}
+SELECT DNO, COUNT(*) AS QTD_FUNCIONARIOS
+FROM EMPLOYEE
+WHERE DNO <> 40
+GROUP BY DNO;
+```
+
+### 12. Departamentos com mais de dois funcionários
+
+Para cada departamento, determine o número total de funcionários que trabalham
+naquele departamento. Suponha que a coluna `SALARY` contenha dados
+confidenciais e que alguém possa deduzir essas informações confidenciais
+examinando o total dos salários de cada departamento. Portanto, decida exibir
+apenas os departamentos nos quais o número de funcionários seja superior a
+dois.
+
+```{sql}
+SELECT DNO, COUNT(*) AS QTD_FUNCIONARIOS
+FROM EMPLOYEE
+GROUP BY DNO
+HAVING COUNT(*) > 2;
+```
+
+### 13. Reproduzir a tabela
+
+Escreva uma solução que possa ser utilizada para reproduzir a seguinte tabela.
+
+| STATE | SUM (ACRES) |
+|:-----:|:-----------:|
+|  AZ   |    51360    |
+|  MA   |    1760     |
+|  MT   |    16931    |
+| Total |    70051    |
+
+```{sql}
+SELECT STATE, "SUM (ACRES)"
+FROM (
+  SELECT 1 AS ORDEM, STATE, SUM(ACRES) AS "SUM (ACRES)"
+  FROM PRESERVE
+  GROUP BY STATE
+  UNION ALL
+  SELECT 2 AS ORDEM, 'Total' AS STATE, SUM(ACRES)
+  FROM PRESERVE
+)
+ORDER BY ORDEM, STATE;
+```
+
+```{r cleanup, include=FALSE}
+dbDisconnect(con)
+```
+
+## Data e hora de compilação
+
+```{r timestamp, echo=FALSE}
+format(Sys.time(), "%d/%m/%Y %H:%M:%S", tz = "America/Sao_Paulo")
+```

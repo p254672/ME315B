@@ -1,0 +1,134 @@
+---
+title: "Lista 7"
+author: "Pedro Monteiro Tilhe - RA 254672"
+date: today
+format: pdf
+---
+
+## Configurando o RStudio
+
+```{r setup}
+library(DBI)
+library(RSQLite)
+knitr::opts_chunk$set(max.print = Inf)
+
+con <- dbConnect(RSQLite::SQLite(), "datasets/purchase.sqlite")
+knitr::opts_chunk$set(connection = "con")
+```
+
+
+### 1. Custo total por peça (`PNO`)
+
+Consulte a tabela `PURCHASE`. Para cada peça, exiba seu número da peça
+(`PNO`), seguido pelo custo total de todas as compras dessa peça.
+
+```{sql}
+SELECT PNO, SUM(COST) AS CUSTO_TOTAL
+FROM PURCHASE
+GROUP BY PNO;
+
+```
+
+### 2. Custo total por funcionário (`ENO`)
+
+Consulte a tabela `PURCHASE`. Para cada funcionário que comprou uma peça,
+exiba seu número de funcionário (`ENO`), seguido pelo custo total de todas as
+peças compradas pelo funcionário.
+
+```{sql}
+SELECT ENO, SUM(COST) AS CUSTO_TOTAL
+FROM PURCHASE
+GROUP BY ENO;
+```
+
+### 3. Custo total por (`PJNO`, `ENO`)
+
+Consulte a tabela `PURCHASE`. Calcule o total de `COST` para cada combinação
+de valores de (`PJNO`, `ENO`). Exiba essas colunas, da esquerda para a
+direita, na sequência (`PJNO`, `ENO`), seguidas pelo custo total. Ordene o
+resultado em ordem crescente por (`PJNO`, `ENO`).
+
+```{sql}
+SELECT PJNO, ENO, SUM(COST) AS CUSTO_TOTAL
+FROM PURCHASE
+GROUP BY PJNO, ENO
+ORDER BY PJNO, ENO;
+```
+
+### 4. Custo total por (`PNO`, `SNO`)
+
+Consulte a tabela `PURCHASE`. Calcule o total de `COST` para cada combinação
+de valores de (`PNO`, `SNO`). Exiba essas colunas, da esquerda para a
+direita, na sequência (`PNO`, `SNO`), seguidas pelo custo total. Ordene o
+resultado em ordem crescente por (`PNO`, `SNO`).
+
+```{sql}
+SELECT PNO, SNO, SUM(COST) AS CUSTO_TOTAL
+FROM PURCHASE
+GROUP BY PNO, SNO
+ORDER BY PNO, SNO;
+```
+
+### 5. Custo total por (`PJNO`, `ENO`, `SNO`)
+
+Consulte a tabela `PURCHASE`. Calcule o total de `COST` para cada combinação
+de valores de (`PJNO`, `ENO`, `SNO`). Exiba essas colunas, da esquerda para a
+direita, na sequência (`PJNO`, `ENO`, `SNO`), seguidas pelo custo total.
+Ordene o resultado em ordem crescente por (`PJNO`, `ENO`, `SNO`).
+
+```{sql}
+SELECT PJNO, ENO, SNO, SUM(COST) AS CUSTO_TOTAL
+FROM PURCHASE
+GROUP BY PJNO, ENO, SNO
+ORDER BY PJNO, ENO, SNO;
+```
+
+### 6. Custo total por (`PNO`, `SNO`, `ENO`)
+
+Consulte a tabela `PURCHASE`. Calcule o total de `COST` para cada combinação
+de valores de (`PNO`, `SNO`, `ENO`). Exiba essas colunas, da esquerda para a
+direita, na sequência (`PNO`, `SNO`, `ENO`), seguidas pelo custo total.
+Ordene o resultado em ordem crescente por (`PNO`, `SNO`, `ENO`).
+
+```{sql}
+SELECT PNO, SNO, ENO, SUM(COST) AS CUSTO_TOTAL
+FROM PURCHASE
+GROUP BY PNO, SNO, ENO
+ORDER BY PNO, SNO, ENO;
+```
+
+### 7. Custo total por (`PJNO`, `ENO`, `SNO`), excluindo o projeto `PJ2`
+
+Consulte a tabela `PURCHASE`. Exclua da análise todas as linhas associadas ao
+projeto `PJ2`. Exiba o total de `COST` para cada combinação de valores
+(`PJNO`, `ENO`, `SNO`).
+
+```{sql}
+SELECT PJNO, ENO, SNO, SUM(COST) AS CUSTO_TOTAL
+FROM PURCHASE
+WHERE PJNO <> 'PJ2'
+GROUP BY PJNO, ENO, SNO
+ORDER BY PJNO, ENO, SNO;
+```
+
+### 8. Combinações (`PNO`, `SNO`, `ENO`) com custo total maior ou igual a 2000
+
+Consulte a tabela `PURCHASE`. Exiba o `COST` total para cada combinação de
+valores (`PNO`, `SNO`, `ENO`) cujo total seja maior ou igual a 2000.
+
+```{sql}
+SELECT PNO, SNO, ENO, SUM(COST) AS CUSTO_TOTAL
+FROM PURCHASE
+GROUP BY PNO, SNO, ENO
+HAVING SUM(COST) >= 2000;
+```
+
+```{r cleanup, include=FALSE}
+dbDisconnect(con)
+```
+
+## Data e hora de compilação
+
+```{r timestamp, echo=FALSE}
+format(Sys.time(), "%d/%m/%Y %H:%M:%S", tz = "America/Sao_Paulo")
+```

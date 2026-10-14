@@ -1,0 +1,165 @@
+---
+title: "Laboratório 8 - Dados Relacionais com Polars (IMDb)"
+author: "Pedro Monteiro Tilhe - RA 254672"
+date: today
+date-format: "DD/MM/YYYY"
+format: pdf
+jupyter: python3
+execute:
+  echo: true
+  warning: false
+---
+
+```{python}
+#| label: setup
+import polars as pl
+from datetime import datetime
+
+# Saida das tabelas em texto ASCII (compativel com o PDF)
+pl.Config.set_tbl_formatting("ASCII_MARKDOWN")
+pl.Config.set_tbl_hide_column_data_types(True)
+pl.Config.set_tbl_hide_dataframe_shape(True)
+pl.Config.set_fmt_str_lengths(40)
+pl.Config.set_tbl_rows(20)
+
+PASTA = "../datasets/"
+
+# Os tres arquivos sao TSV (separados por tab) compactados com gzip.
+# "\N" representa valor faltante. quote_char=None porque alguns titulos
+# contem aspas que nao delimitam campos.
+OPCOES = dict(separator="\t", null_values="\\N", quote_char=None)
+```
+
+### 1. Leitura dos dados
+
+Lemos apenas as colunas necessárias, para economizar memória.
+
+```{python}
+basics = pl.read_csv(
+    PASTA + "title.basics0.tsv.gz",
+    columns=["tconst", "titleType", "primaryTitle", "startYear", "genres"],
+    schema_overrides={"startYear": pl.Int64},
+    **OPCOES,
+)
+
+ratings = pl.read_csv(PASTA + "title.ratings.tsv.gz", **OPCOES)
+
+principals = pl.read_csv(
+    PASTA + "title.principals0.tsv.gz",
+    columns=["tconst", "nconst", "category"],
+    **OPCOES,
+)
+
+print(basics.shape, ratings.shape, principals.shape)
+```
+
+Como as perguntas tratam de **filmes**, consideramos apenas os títulos com
+`titleType == "movie"` que possuem avaliação (junção interna com `ratings`
+pela chave `tconst`).
+
+```{python}
+filmes = (
+    basics
+    .filter(pl.col("titleType") == "movie")
+    .join(ratings, on="tconst", how="inner")
+)
+
+filmes.height
+```
+
+### 2. Os 5 filmes com as maiores notas
+
+Ordenamos pela nota média (decrescente) e, em caso de empate, pelo número de
+votos (decrescente). Como critério final de desempate usamos `tconst`, para o
+resultado ser determinístico.
+
+```{python}
+top5 = (
+    filmes
+    .sort(
+        ["averageRating", "numVotes", "tconst"],
+        descending=[True, True, False],
+    )
+    .select("tconst", "primaryTitle", "startYear", "averageRating", "numVotes")
+    .head(5)
+)
+
+top5
+```
+
+Todos os cinco filmes têm nota 10, e o desempate pelo número de votos define
+a ordem. Note que são filmes com poucos votos; um ranking mais robusto
+exigiria um número mínimo de votos. Como complemento, o mesmo critério
+restrito a filmes com pelo menos 100 mil votos:
+
+```{python}
+(
+    filmes
+    .filter(pl.col("numVotes") >= 100_000)
+    .sort(
+        ["averageRating", "numVotes", "tconst"],
+        descending=[True, True, False],
+    )
+    .select("tconst", "primaryTitle", "startYear", "averageRating", "numVotes")
+    .head(5)
+)
+```
+
+### 3. Gênero mais frequente entre os filmes com nota maior que 8
+
+A coluna `genres` pode ter vários gêneros separados por vírgula. Separamos
+essa coluna em uma lista e usamos `explode` para ter uma linha por par
+(filme, gênero). Depois contamos os filmes por gênero.
+
+```{python}
+generos = (
+    filmes
+    .filter(pl.col("averageRating") > 8)
+    .with_columns(pl.col("genres").str.split(","))
+    .explode("genres")
+    .drop_nulls("genres")
+    .group_by("genres")
+    .agg(pl.len().alias("n_filmes"))
+    .sort(["n_filmes", "genres"], descending=[True, False])
+)
+
+generos.head(5)
+```
+
+```{python}
+genero_top = generos.row(0, named=True)
+print(f"Genero mais frequente: {genero_top['genres']} "
+      f"({genero_top['n_filmes']} filmes)")
+```
+
+### 4. Os 3 atores/atrizes com mais filmes de nota maior que 7.5
+
+Selecionamos em `principals` as categorias `actor` e `actress`, juntamos com
+os filmes de nota maior que 7.5 e contamos o número de filmes distintos por
+pessoa (`nconst`). Os arquivos fornecidos não têm o nome das pessoas, então
+elas são identificadas pelo `nconst`.
+
+```{python}
+filmes_bons = filmes.filter(pl.col("averageRating") > 7.5).select("tconst")
+
+atores = (
+    principals
+    .filter(pl.col("category").is_in(["actor", "actress"]))
+    .join(filmes_bons, on="tconst", how="inner")
+    .group_by("nconst")
+    .agg(
+        pl.col("tconst").n_unique().alias("n_filmes"),
+        pl.col("category").first().alias("categoria"),
+    )
+    .sort(["n_filmes", "nconst"], descending=[True, False])
+)
+
+atores.head(3)
+```
+
+## Data e hora de compilação
+
+```{python}
+#| echo: false
+print(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+```
